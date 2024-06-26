@@ -1,0 +1,256 @@
+# Step 1: Import Libraries
+
+To perform data manipulation, visualization, and modeling, we need to import various libraries. These libraries include pandas for data handling, NumPy for numerical operations, scikit-learn for machine learning, and Matplotlib and Seaborn for visualization.
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder, LabelBinarizer, MinMaxScaler
+from sklearn.model_selection import train_test_split, RandomizedSearchCV, GridSearchCV
+from sklearn.metrics import mean_squared_error, mean_squared_log_error
+from sklearn.linear_model import LinearRegression, SGDRegressor, Lasso
+from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import RandomizedSearchCV
+import xgboost as xgb
+
+# Step 2: Load and Explore the Data
+
+Load the dataset into a pandas DataFrame and explore its structure using various methods to understand the data you are working with. This includes checking the first few rows, summary statistics, and data types.
+train_file_path = "../input/house-prices-advanced-regression-techniques/train.csv"
+df_train = pd.read_csv(train_file_path)
+
+test_file_path = "../input/house-prices-advanced-regression-techniques/test.csv"
+df_test = pd.read_csv(test_file_path)
+
+df_train.drop(['Id'], axis=1, inplace=True)
+
+test_id = df_test['Id']
+
+df_test.drop(['Id'], axis=1, inplace=True)
+df_train.shape, df_test.shape
+df_train.head()
+df_train.info()
+
+# Step 3: Select Relevant Features
+
+Explore and visualize the data to understand the relationships between different features and the target variable.
+sns.histplot(df_train['SalePrice'], bins= 50, kde= True)
+df_train['Street'].unique() , df_train['MSZoning'].unique(), df_train['Utilities'].unique()
+sns.relplot(data=df_train,x='LotArea',y='SalePrice')
+sns.histplot(data=df_train,x='LotArea')
+sns.boxplot(data=df_train,y='LotArea')
+sns.histplot(data=df_train,x='MSZoning')
+
+sns.histplot(data=df_train,x='LotShape')
+plt.figure(figsize=(10, 6))
+sns.relplot(x='LotArea', y='SalePrice', data=df_train, kind='scatter', 
+            col='MSZoning', col_wrap=3)
+plt.show()
+df_train['MSZoning'].value_counts()
+plt.figure(figsize=(10, 6))
+sns.relplot(x='LotArea', y='SalePrice', data=df_train, kind='scatter', 
+            col='LotShape', col_wrap=3)
+plt.show()
+df_train['LotShape'].value_counts()
+plt.figure(figsize=(10, 6))
+sns.relplot(x='LotArea', y='SalePrice', data=df_train, kind='scatter', 
+            col='Street', col_wrap=3)
+plt.show()
+sns.histplot(data=df_train,x='Street')
+sns.histplot(data=df_train,x='Utilities')
+sns.relplot(kind='scatter', data=df_train, x='PoolArea', y='SalePrice', size ='LotArea')
+sns.boxplot(data=df_train,y='PoolArea')
+dataset_numeric = df_train.select_dtypes(include=['int64','float64'])
+fig , ax = plt.subplots(figsize=(15,15))
+corr=dataset_numeric.corr()[['SalePrice']]
+corr.drop(['SalePrice'], axis=0, inplace=True)
+sns.heatmap(corr.sort_values(by='SalePrice', ascending=False), ax=ax, annot=True)
+enumerate(dataset_numeric.columns)
+plt.figure(figsize=(16, 16))
+for i, col in enumerate(dataset_numeric.columns):
+    # Plot box plot
+    plt.subplot(7, 6, i + 1)
+    sns.boxplot(y=dataset_numeric[col])
+    plt.title(f'Box Plot of {col}')
+    plt.ylabel(col)
+
+plt.tight_layout()
+plt.show()
+df_train.describe()
+sns.relplot(data = df_train,x='MSSubClass',y='SalePrice')
+df_train['Alley']
+df_train.info()
+df_train['MasVnrType'].isnull().sum()
+
+# Step 4: Data Cleaning and Feature Engineering
+
+Create new features and drop some irrelevant ones. We also handle missing values.
+drop_columns = ['Alley', 'PoolQC', 'Fence', 'MiscFeature', 'MasVnrType']
+
+df_train.drop(drop_columns, axis=1, inplace=True)
+df_test.drop(drop_columns, axis=1, inplace=True)
+df_train.info()
+y_train = df_train['SalePrice']
+X_train = df_train.drop(['SalePrice'],axis= 1)
+from datetime import date
+
+#Start by creating more complete features from others that don't provide as much information
+X_train['SquareFootage'] = X_train['GrLivArea']
+
+X_train['TotalBathrooms'] = X_train['FullBath'] + 0.5 * X_train['HalfBath'] + X_train['BsmtFullBath'] + 0.5 * X_train['BsmtHalfBath']
+
+X_train['Remodeled'] = X_train['YearRemodAdd'] > X_train['YearBuilt']
+
+#MSSubClass is originally numerical but the numbers don't represent the "distances" or relative orders of categories
+X_train['MSSubClass'] = X_train['MSSubClass'].astype(object) 
+
+X_train['YearSoldReal'] = X_train['YrSold'] + X_train['MoSold']/12
+
+X_train['HouseAge'] = (date.today().year - X_train['YearBuilt']).astype(int)
+
+#Apply same treatement to test df_test
+
+df_test['SquareFootage'] = df_test['GrLivArea']
+
+df_test['TotalBathrooms'] = df_test['FullBath'] + 0.5 * df_test['HalfBath'] + df_test['BsmtFullBath'] + 0.5 * df_test['BsmtHalfBath']
+
+df_test['Remodeled'] = (df_test['YearRemodAdd'] > df_test['YearBuilt']).astype(int)
+
+#MSSubClass is originally numerical but the numbers don't represent the "distances" or relative orders of categories
+df_test['MSSubClass'] = df_test['MSSubClass'].astype(object) 
+
+df_test['YearSoldReal'] = df_test['YrSold'] + df_test['MoSold']/12
+
+df_test['HouseAge'] = (date.today().year - df_test['YearBuilt']).astype(int)
+
+X_train = X_train.drop(['FullBath','HalfBath','BsmtFullBath','YearRemodAdd','YearBuilt','YrSold','MoSold','YearBuilt'],axis=1)
+
+df_test =df_test.drop(['FullBath','HalfBath','BsmtFullBath','YearRemodAdd','YearBuilt','YrSold','MoSold','YearBuilt'],axis=1)
+
+X_train.shape,df_test.shape
+
+# Step 5: Handling Missing Values
+
+Impute missing values in both numerical and categorical columns.
+num_cols = [col for col in X_train.columns if X_train[col].dtype in ['float64', 'int64']]
+cat_cols = [col for col in X_train.columns if X_train[col].dtype not in ['float64', 'int64']]
+num_imputer = SimpleImputer(strategy='mean')
+cat_imputer = SimpleImputer(strategy='most_frequent')
+X_train[num_cols]= num_imputer.fit_transform(X_train[num_cols])
+X_train[cat_cols]= cat_imputer.fit_transform(X_train[cat_cols])
+df_test[num_cols]= num_imputer.transform(df_test[num_cols])
+df_test[cat_cols]= cat_imputer.transform(df_test[cat_cols])
+X_train.shape,df_test.shape
+df_test.columns == X_train.columns
+
+# Step 6: Encode Categorical Features
+
+Replace ordinal features with numerical values and one-hot encode the remaining categorical features.
+def replace_ordinal_feats(data):
+    #Dictionaries to convert categorical values to strings
+#     dict_street = {'Grvl':0, 'Pave':1}
+    dict_lot_shape = {'Reg':0, 'IR1':1, 'IR2':2, 'IR3':3}
+    dict_utilities = {'AllPub':0, 'NoSewr':1, 'NoSeWa':2, 'ELO':3}
+    dict_qual_cond = {'Ex':0, 'Gd':1, 'TA':2, 'Fa':3, 'Po':4, 'None':5}
+    dict_exposure = {'Gd':0, 'Av':1, 'Mn':2, 'No':3, 'None':3}
+    dict_finish = {'GLQ':0, 'ALQ':1, 'BLQ':2, 'Rec':3, 'LwQ':4, 'Unf':5, 'None':6}
+    dict_air = {'Y':0, 'N':1}
+    dict_electrical = {'SBrkr':0, 'FuseA':1, 'FuseF':2, 'FuseP':3, 'Mix':4}
+    dict_functional = {'Typ':0, 'Min1':1, 'Min2':2, 'Mod':3, 'Maj1':4, 'Maj2':5, 'Sev':6, 'Sal':7}
+    dict_gar_finish = {'Fin':0, 'RFn':1, 'Unf':2, 'None':3}
+    dict_pave = {'Y':0, 'P':1, 'N':2}
+    
+    #Tuples with dicts corresponding to each column to convert
+    replace_columns = [('LotShape', dict_lot_shape), ('Utilities', dict_utilities),\
+                      ('ExterQual', dict_qual_cond), ('ExterCond', dict_qual_cond), ('BsmtQual', dict_qual_cond),\
+                      ('BsmtCond', dict_qual_cond), ('BsmtExposure', dict_exposure), ('BsmtFinType1', dict_finish),\
+                      ('HeatingQC', dict_qual_cond), ('CentralAir', dict_air), ('Electrical', dict_electrical),\
+                      ('KitchenQual', dict_qual_cond), ('Functional', dict_functional), ('FireplaceQu', dict_qual_cond),\
+                      ('GarageFinish', dict_gar_finish), ('GarageQual', dict_qual_cond), ('GarageCond', dict_qual_cond),\
+                      ('PavedDrive', dict_pave)]
+#Replace categoricals with integers
+    for (col, repl_dict) in replace_columns:
+        data.replace({col: repl_dict}, inplace=True)
+
+#Apply to datasets
+replace_ordinal_feats(X_train)
+replace_ordinal_feats(df_test)
+cat_col = [col for col in X_train if X_train[col].dtype not in ['int','float']]
+#Get remaining categorical columns
+categorical_columns = X_train.select_dtypes('object').columns  
+        
+#Define and train One hot encoder
+enc = OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=int).fit(X_train[categorical_columns])
+    
+#Transform selected portion of dataframes
+X_train_transformed = enc.transform(X_train[categorical_columns].to_numpy())
+df_test_transformed = enc.transform(df_test[categorical_columns].to_numpy())
+
+#Get feature names for new columns
+new_cols = enc.get_feature_names_out()
+    
+#Create a Pandas DataFrames of the hot encoded columns
+X_train_ohe = pd.DataFrame(X_train_transformed.reshape(-1,len(new_cols)), columns=new_cols)
+df_test_ohe = pd.DataFrame(df_test_transformed.reshape(-1,len(new_cols)), columns=new_cols)
+    
+#Drop categorical columns
+X_train.drop(list(categorical_columns.values), axis=1, inplace=True)
+df_test.drop(list(categorical_columns.values), axis=1, inplace=True)
+
+#Concat with original data
+X_train = pd.concat([X_train, X_train_ohe], axis=1)
+df_test = pd.concat([df_test, df_test_ohe], axis=1)  
+X_train.info()
+cat_cols
+X_train.select_dtypes('number')
+
+# Step 7: Scaling Features
+
+Scale the features using MinMaxScaler to normalize the data.
+scaler = MinMaxScaler() #we could use StandardScaler instead but it removes outliers by scaling the variance
+scaler.fit(X_train)
+scaler.fit(df_test)
+
+#Apply scaling
+X_train = scaler.transform(X_train)
+df_test = scaler.transform(df_test)
+X_train.shape, df_test.shape
+
+# Step 8: Train-Validation Split
+
+Split the training data into training and validation sets.
+X = X_train
+y = y_train
+X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, shuffle=True, random_state=6)
+X_train.shape, X_val.shape, y_train.shape, y_val.shape
+
+# Step 9: Model Training and Evaluation
+
+Train a Lasso regression model and an SGD regressor, then evaluate their performance using Root Mean Squared Error (RMSE).
+lso = Lasso(alpha=150, max_iter=10000,random_state=5)
+lso.fit(X_train,y_train)
+y_train_hat= lso.predict(X_train)
+y_val_hat= lso.predict(X_val)
+rmse_train= mean_squared_error(np.log(y_train), np.log(y_train_hat))**0.5
+rmse_val= mean_squared_error(np.log(y_val), np.log(y_val_hat))**0.5
+rmse_train, rmse_val
+Then train an SGD regressor model:
+sgd_reg= SGDRegressor(loss='squared_error', l1_ratio=0, penalty='l2', alpha=0.014, eta0=0.01, max_iter=10000, tol=0.001,random_state=5)
+sgd_reg.fit(X_train,y_train)
+y_train_hat= sgd_reg.predict(X_train)
+y_val_hat= sgd_reg.predict(X_val)
+rmse_train= mean_squared_error(np.log(y_train), np.log(y_train_hat))**0.5
+rmse_val= mean_squared_error(np.log(y_val), np.log(y_val_hat))**0.5
+rmse_train, rmse_val
+
+# Step 10: Making Predictions and Submission
+
+Make predictions on the test dataset and prepare a submission file.
+sgd_reg.fit(X,y)
+def make_submission(X_test):
+    sub_df = pd.read_csv('/kaggle/input/house-prices-advanced-regression-techniques/sample_submission.csv', index_col = "Id")
+    sub_df['SalePrice'] = sgd_reg.predict(X_test)
+    sub_df.to_csv("submission.csv")
+make_submission(df_test)
